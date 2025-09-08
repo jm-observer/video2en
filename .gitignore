@@ -1,0 +1,40 @@
+# Rust
+/target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Audio/Video files
+*.wav
+*.mp4
+*.mp3
+*.avi
+*.mkv
+
+# Model files
+*.bin
+*.pth
+*.onnx
+
+# Output files
+output/
+*.srt
+*.txt
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp

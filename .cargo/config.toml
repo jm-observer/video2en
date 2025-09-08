@@ -1,0 +1,32 @@
+# .cargo/config.toml
+# 说明：
+# - 适用于 whisper-rs = { version = "0.15", features = ["cuda"] }
+# - 强制走 cuBLAS（更稳），并显式指定 CUDA 架构为 7.5（RTX 2060）
+# - 不要再设置 WHISPER_CUBLAS（已废弃，会上游 CMake 直接报错）
+
+[env]
+# 指定 CUDA 架构（RTX 2060 = 75）。带上 virtual，驱动可 JIT 生成内核。
+GGML_CUDA_ARCHITECTURES = "75;75-virtual"
+CMAKE_CUDA_ARCHITECTURES = "75;75-virtual"
+
+# 稳定优先：强制使用 cuBLAS，而非部分自定义 kernel（避免 IM2COL 之类问题）
+# 使用布尔值格式，确保正确传递
+GGML_CUDA_FORCE_CUBLAS = "true"
+
+#（可选）关闭 MMQ 路径，进一步减少不稳定因素
+# 使用布尔值格式
+GGML_CUDA_FORCE_MMQ = "false"
+
+# 额外的CUDA配置，确保正确识别
+GGML_CUDA = "1"
+
+#（可选）如果 CUDA 安装不在默认位置，可显式告诉构建脚本
+# CUDA_PATH = "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.4"
+
+# ⚠️ 不要设置（或请确保未设置）：
+# WHISPER_CUBLAS  # 已废弃，设置后会触发 CMake 错误
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
