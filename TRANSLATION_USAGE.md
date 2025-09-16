@@ -4,43 +4,21 @@
 
 video2en工具现在支持将有道翻译API集成，可以将提取的英文内容自动翻译成中文，生成中英文对照的学习材料。
 
-## 获取有道翻译API密钥
-
-1. 访问 [有道智云](https://ai.youdao.com/)
-2. 注册账号并登录
-3. 创建应用，获取 `应用ID` 和 `应用密钥`
-4. 确保应用已开通"文本翻译"服务
-
 ## 使用方法
 
-### 方法1: 环境变量（推荐）
+API密钥已经内置在代码中，无需额外配置。只需要使用 `--translate` 参数即可启用翻译功能。
+
+### 基本用法
 
 ```bash
-# 设置环境变量
-export YOUDAO_APP_KEY="your_app_key_here"
-export YOUDAO_APP_SECRET="your_app_secret_here"
-
 # 运行程序并启用翻译
 cargo run -- -i input.mp4 -m model.bin -o output/ --translate
 ```
 
-### 方法2: 命令行参数
-
-```bash
-cargo run -- -i input.mp4 -m model.bin -o output/ \
-  --translate \
-  --youdao-app-key "your_app_key_here" \
-  --youdao-app-secret "your_app_secret_here"
-```
-
-### 方法3: Windows PowerShell
+### Windows PowerShell
 
 ```powershell
-# 设置环境变量
-$env:YOUDAO_APP_KEY="your_app_key_here"
-$env:YOUDAO_APP_SECRET="your_app_secret_here"
-
-# 运行程序
+# 运行程序并启用翻译
 cargo run -- -i input.mp4 -m model.bin -o output/ --translate
 ```
 
@@ -86,9 +64,7 @@ cargo run -- \
   -m "D:\models\ggml-medium.bin" \
   -o "D:\output\" \
   --gpu \
-  --translate \
-  --youdao-app-key "your_key" \
-  --youdao-app-secret "your_secret"
+  --translate
 ```
 
 ## 技术实现

@@ -49,15 +49,7 @@ struct Args {
     #[arg(long)]
     force: bool,
 
-    /// Youdao Translate API App Key
-    #[arg(long, env = "YOUDAO_APP_KEY")]
-    youdao_app_key: Option<String>,
-
-    /// Youdao Translate API App Secret
-    #[arg(long, env = "YOUDAO_APP_SECRET")]
-    youdao_app_secret: Option<String>,
-
-    /// Enable translation (requires Youdao API credentials)
+    /// Enable translation
     #[arg(long)]
     translate: bool,
 }
@@ -483,13 +475,11 @@ impl Video2En {
     }
 
     async fn translate_segments(&self, segments: &mut Vec<Segment>) -> Result<()> {
-        // 检查是否有有道API配置
-        let app_key = self.args.youdao_app_key.as_ref()
-            .ok_or_else(|| anyhow!("Youdao API App Key not provided"))?;
-        let app_secret = self.args.youdao_app_secret.as_ref()
-            .ok_or_else(|| anyhow!("Youdao API App Secret not provided"))?;
+        // 使用写死的有道API密钥
+        let app_key = "your_app_key_here".to_string();
+        let app_secret = "your_app_secret_here".to_string();
 
-        let translator = YoudaoTranslator::new(app_key.clone(), app_secret.clone());
+        let translator = YoudaoTranslator::new(app_key, app_secret);
         
         println!("🌐 正在翻译英文内容...");
         
