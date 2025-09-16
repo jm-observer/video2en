@@ -484,41 +484,53 @@ impl Video2En {
     }
 
     async fn translate_segments(&self, segments: &mut Vec<Segment>) -> Result<()> {
-        // 使用写死的有道API密钥
-        let app_key = "your_app_key_here".to_string();
-        let app_secret = "your_app_secret_here".to_string();
-
-        let translator = YoudaoTranslator::new(app_key, app_secret);
+        let translator = YoudaoTranslator::new();
         
         println!("🌐 正在翻译英文内容...");
         
-        let texts: Vec<String> = segments.iter().map(|s| s.text.clone()).collect();
-        let translations = translator.translate_batch(&texts).await?;
-        
-        for (i, translation) in translations.into_iter().enumerate() {
-            segments[i].translation = Some(translation);
+        for (i, segment) in segments.iter_mut().enumerate() {
+            print!("\r🔄 翻译进度: {}/{}", i + 1, segments.len());
+            std::io::Write::flush(&mut std::io::stdout()).ok();
+            
+            match translator.translate(&segment.text).await {
+                Ok(word_info) => {
+                    if let Some(ec) = word_info.ec.word.trs.first() {
+                        segment.translation = Some(ec.tran.clone());
+                    } else {
+                        segment.translation = Some("未找到翻译".to_string());
+                    }
+                }
+                Err(e) => {
+                    println!("\n⚠️ 翻译失败: {} - {}", segment.text, e);
+                    segment.translation = Some("翻译失败".to_string());
+                }
+            }
+            
+            // 添加小延迟避免API限制
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
         
+        println!("\n✅ 翻译完成!");
         Ok(())
     }
 
     async fn test_translation(&self) -> Result<()> {
         println!("🧪 测试有道翻译API...");
         
-        // 使用写死的有道API密钥
-        let app_key = "your_app_key_here".to_string();
-        let app_secret = "your_app_secret_here".to_string();
-
-        let translator = YoudaoTranslator::new(app_key, app_secret);
+        let translator = YoudaoTranslator::new();
         
-        let test_text = "It's peaceful";
+        let test_text = "It's peaceful".to_string();
         println!("📝 测试文本: {}", test_text);
         
-        match translator.translate(test_text).await {
-            Ok(translation) => {
+        match translator.translate(&test_text).await {
+            Ok(word_info) => {
                 println!("✅ 翻译成功!");
                 println!("   英文: {}", test_text);
-                println!("   中文: {}", translation);
+                if let Some(ec) = word_info.ec.word.trs.first() {
+                    println!("   中文: {}", ec.tran);
+                } else {
+                    println!("   中文: 未找到翻译");
+                }
             }
             Err(e) => {
                 println!("❌ 翻译失败: {}", e);

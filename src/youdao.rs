@@ -1,6 +1,12 @@
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
+use std::str::FromStr;
+use url::Url;
+use md5::{Md5, Digest};
+use hex;
+
+use crate::youdao_translate::WordAllInfo;
 
 #[derive(Debug, Deserialize)]
 pub struct YoudaoTranslationResponse {
@@ -29,7 +35,9 @@ pub struct YoudaoTranslator {
 }
 
 impl YoudaoTranslator {
-    pub fn new(app_key: String, app_secret: String) -> Self {
+    pub fn new() -> Self {
+        let app_key = "Mk6hqtUp33DGGtoS63tTJbMUYjRrG1Lu".to_string();
+        let app_secret = "your_app_secrewebdictt_here".to_string();
         Self {
             app_key,
             app_secret,
@@ -37,70 +45,45 @@ impl YoudaoTranslator {
         }
     }
 
-    pub async fn translate(&self, text: &str) -> Result<String> {
-        // 生成随机盐值
-        let salt = format!("{}", SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs());
-        
-        // 生成签名: MD5(appKey + q + salt + appSecret)
-        let sign_string = format!("{}{}{}{}", self.app_key, text, salt, self.app_secret);
-        let sign = format!("{:x}", md5::compute(sign_string.as_bytes()));
-
-        let request_body = YoudaoTranslationRequest {
-            q: text.to_string(),
-            from: "en".to_string(),
-            to: "zh-CHS".to_string(),
-            appKey: self.app_key.clone(),
-            salt,
-            sign,
-        };
-
-        let response = self.client
-            .post("https://openapi.youdao.com/api")
-            .form(&request_body)
+    pub async fn translate(&self， text: &String) -> Result<WordAllInfo> {
+        let client = reqwest::Client::builder().no_proxy().build()?;
+        let w = "Mk6hqtUp33DGGtoS63tTJbMUYjRrG1Lu";
+        let v = "webdict";
+        let param_client = "web";
+        let le = "en";
+        let keyfrom = "webdict";
+        let r = format!("{}{}", text, v);
+        let time = (r.len() % 10).to_string();
+    
+        let mut hasher = Md5::new();
+        hasher.update(r.as_bytes());
+        let result = hasher.finalize();
+        let o = hex::encode(result);
+    
+        let n = format!("{}{}{}{}{}", param_client, text, time, w, o);
+        let mut hasher = Md5::new();
+        hasher.update(n.as_bytes());
+        let result = hasher.finalize();
+        let f = hex::encode(result);
+    
+        let params = [
+            ("q", text.as_str()),
+            ("le", le),
+            ("t", time.as_str()),
+            ("client", param_client),
+            ("sign", f.as_str()),
+            ("keyfrom", keyfrom),
+        ];
+        client
+            .post(Url::from_str(
+                "https://dict.youdao.com/jsonapi_s?doctype=json&jsonversion=4",
+            )?)
+            .form(&params)
             .send()
-            .await
-            .context("Failed to send translation request")?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!("Youdao API returned error: {}", response.status()));
-        }
-
-        let translation_response: YoudaoTranslationResponse = response
+            .await?
             .json()
             .await
-            .context("Failed to parse translation response")?;
-
-        if translation_response.error_code != "0" {
-            return Err(anyhow!("Youdao API error: {}", translation_response.error_code));
-        }
-
-        if let Some(translation) = translation_response.translations.first() {
-            Ok(translation.clone())
-        } else {
-            Err(anyhow!("No translation found in response"))
-        }
+            .map_err(|x| anyhow!("{} json fail: {}", text, x.to_string()))
     }
 
-    pub async fn translate_batch(&self, texts: &[String]) -> Result<Vec<String>> {
-        let mut results = Vec::new();
-        
-        for (i, text) in texts.iter().enumerate() {
-            print!("\r🔄 翻译进度: {}/{}", i + 1, texts.len());
-            std::io::Write::flush(&mut std::io::stdout()).ok();
-            
-            match self.translate(text).await {
-                Ok(translation) => results.push(translation),
-                Err(e) => {
-                    println!("\n⚠️ 翻译失败: {} - {}", text, e);
-                    results.push("翻译失败".to_string());
-                }
-            }
-            
-            // 添加小延迟避免API限制
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        }
-        
-        println!("\n✅ 翻译完成!");
-        Ok(results)
-    }
 }
