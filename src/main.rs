@@ -3,8 +3,8 @@ use clap::Parser;
 use lingua::{Language, LanguageDetector, LanguageDetectorBuilder};
 use regex::Regex;
 use std::{fs, path::{Path, PathBuf}, process::Command};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use video2en::youdao::YoudaoTranslator;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -70,25 +70,6 @@ struct Segment {
     translation: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct YoudaoTranslationResponse {
-    #[serde(rename = "translation")]
-    translations: Vec<String>,
-    #[serde(rename = "query")]
-    query: String,
-    #[serde(rename = "errorCode")]
-    error_code: String,
-}
-
-#[derive(Debug, Serialize)]
-struct YoudaoTranslationRequest {
-    q: String,
-    from: String,
-    to: String,
-    appKey: String,
-    salt: String,
-    sign: String,
-}
 
 struct Video2En {
     args: Args,
@@ -501,81 +482,24 @@ impl Video2En {
             .join(" ")
     }
 
-    async fn translate_text(&self, text: &str) -> Result<String> {
+    async fn translate_segments(&self, segments: &mut Vec<Segment>) -> Result<()> {
         // 检查是否有有道API配置
         let app_key = self.args.youdao_app_key.as_ref()
             .ok_or_else(|| anyhow!("Youdao API App Key not provided"))?;
         let app_secret = self.args.youdao_app_secret.as_ref()
             .ok_or_else(|| anyhow!("Youdao API App Secret not provided"))?;
 
-        // 生成随机盐值
-        let salt = format!("{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)?.as_secs());
+        let translator = YoudaoTranslator::new(app_key.clone(), app_secret.clone());
         
-        // 生成签名: MD5(appKey + q + salt + appSecret)
-        let sign_string = format!("{}{}{}{}", app_key, text, salt, app_secret);
-        let sign = format!("{:x}", md5::compute(sign_string.as_bytes()));
-
-        let client = reqwest::Client::new();
-        let request_body = YoudaoTranslationRequest {
-            q: text.to_string(),
-            from: "en".to_string(),
-            to: "zh-CHS".to_string(),
-            appKey: app_key.clone(),
-            salt,
-            sign,
-        };
-
-        let response = client
-            .post("https://openapi.youdao.com/api")
-            .form(&request_body)
-            .send()
-            .await
-            .context("Failed to send translation request")?;
-
-        if !response.status().is_success() {
-            return Err(anyhow!("Youdao API returned error: {}", response.status()));
-        }
-
-        let translation_response: YoudaoTranslationResponse = response
-            .json()
-            .await
-            .context("Failed to parse translation response")?;
-
-        if translation_response.error_code != "0" {
-            return Err(anyhow!("Youdao API error: {}", translation_response.error_code));
-        }
-
-        if let Some(translation) = translation_response.translations.first() {
-            Ok(translation.clone())
-        } else {
-            Err(anyhow!("No translation found in response"))
-        }
-    }
-
-    async fn translate_segments(&self, segments: &mut Vec<Segment>) -> Result<()> {
         println!("🌐 正在翻译英文内容...");
         
-        let total_count = segments.len();
-        for i in 0..total_count {
-            print!("\r🔄 翻译进度: {}/{}", i + 1, total_count);
-            std::io::Write::flush(&mut std::io::stdout()).ok();
-            
-            let text = segments[i].text.clone();
-            match self.translate_text(&text).await {
-                Ok(translation) => {
-                    segments[i].translation = Some(translation);
-                }
-                Err(e) => {
-                    println!("\n⚠️ 翻译失败: {} - {}", text, e);
-                    segments[i].translation = Some("翻译失败".to_string());
-                }
-            }
-            
-            // 添加小延迟避免API限制
-            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        let texts: Vec<String> = segments.iter().map(|s| s.text.clone()).collect();
+        let translations = translator.translate_batch(&texts).await?;
+        
+        for (i, translation) in translations.into_iter().enumerate() {
+            segments[i].translation = Some(translation);
         }
         
-        println!("\n✅ 翻译完成!");
         Ok(())
     }
 
