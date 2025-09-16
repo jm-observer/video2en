@@ -19,11 +19,11 @@ use video2en::youdao::YoudaoTranslator;
 struct Args {
     /// Input video/audio file path
     #[arg(short, long, value_name = "PATH")]
-    input: PathBuf,
+    input: Option<PathBuf>,
 
     /// Whisper GGML model path
     #[arg(short, long, value_name = "PATH")]
-    model: PathBuf,
+    model: Option<PathBuf>,
 
     /// Output prefix (without extension, defaults to input filename)
     #[arg(short, long, value_name = "PREFIX")]
@@ -52,6 +52,10 @@ struct Args {
     /// Enable translation
     #[arg(long)]
     translate: bool,
+
+    /// Test translation API
+    #[arg(long)]
+    test_translation: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -122,7 +126,8 @@ impl Video2En {
     }
 
     fn extract_audio(&self, output_prefix: &Path) -> Result<PathBuf> {
-        let input_path = &self.args.input;
+        let input_path = self.args.input.as_ref()
+            .ok_or_else(|| anyhow!("Input file is required"))?;
         
         // 获取输入文件名（不含扩展名）
         let input_stem = input_path
@@ -176,8 +181,10 @@ impl Video2En {
         println!("📁 Output directory: {}", output_dir.display());
         
         // 构建 whisper-cli 命令 - 使用指定的参数格式
+        let model = self.args.model.as_ref()
+            .ok_or_else(|| anyhow!("Model file is required"))?;
         let mut cmd = Command::new("whisper-cli.exe");
-        cmd.arg("-m").arg(&self.args.model)
+        cmd.arg("-m").arg(model)
            .arg("-f").arg(audio_path.to_str().unwrap())
            .arg("-l").arg("en")  // 固定为英文
            .arg("-tr")           // 翻译
@@ -296,13 +303,15 @@ impl Video2En {
             output.clone()
         } else {
             // Use input filename without extension as prefix
-            let input_stem = self.args.input
+            let input = self.args.input.as_ref()
+                .ok_or_else(|| anyhow!("Input file is required"))?;
+            let input_stem = input
                 .file_stem()
                 .ok_or_else(|| anyhow!("Invalid input filename"))?
                 .to_string_lossy()
                 .to_string();
             
-            self.args.input
+            input
                 .parent()
                 .unwrap_or(Path::new("."))
                 .join(input_stem)
@@ -493,6 +502,32 @@ impl Video2En {
         Ok(())
     }
 
+    async fn test_translation(&self) -> Result<()> {
+        println!("🧪 测试有道翻译API...");
+        
+        // 使用写死的有道API密钥
+        let app_key = "your_app_key_here".to_string();
+        let app_secret = "your_app_secret_here".to_string();
+
+        let translator = YoudaoTranslator::new(app_key, app_secret);
+        
+        let test_text = "It's peaceful";
+        println!("📝 测试文本: {}", test_text);
+        
+        match translator.translate(test_text).await {
+            Ok(translation) => {
+                println!("✅ 翻译成功!");
+                println!("   英文: {}", test_text);
+                println!("   中文: {}", translation);
+            }
+            Err(e) => {
+                println!("❌ 翻译失败: {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+
     fn save_unique_english(&self, segments: &Vec<&Segment>, output_path: &Path) -> Result<()> {
         if output_path.exists() && !self.args.force {
             println!("[skip] 去重英文文件已存在: {}", output_path.display());
@@ -544,6 +579,26 @@ async fn main() -> Result<()> {
         return Err(anyhow!("Model file does not exist: {}", args.model.display()));
     }
 
-    let processor = Video2En::new(args)?;
-    processor.run().await
+    // 如果指定了测试翻译，则只运行测试，不需要验证输入文件
+    if args.test_translation {
+        let processor = Video2En::new(args)?;
+        processor.test_translation().await
+    } else {
+        // 验证输入文件存在
+        let input = args.input.as_ref()
+            .ok_or_else(|| anyhow!("Input file is required"))?;
+        if !input.exists() {
+            return Err(anyhow!("Input file does not exist: {}", input.display()));
+        }
+
+        // 验证模型文件存在
+        let model = args.model.as_ref()
+            .ok_or_else(|| anyhow!("Model file is required"))?;
+        if !model.exists() {
+            return Err(anyhow!("Model file does not exist: {}", model.display()));
+        }
+
+        let processor = Video2En::new(args)?;
+        processor.run().await
+    }
 }
