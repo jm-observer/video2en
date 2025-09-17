@@ -3,7 +3,6 @@ use clap::Parser;
 use lingua::{Language, LanguageDetector, LanguageDetectorBuilder};
 use regex::Regex;
 use std::{fs, path::{Path, PathBuf}, process::Command};
-use std::collections::HashMap;
 use video2en::youdao::YoudaoTranslator;
 
 #[derive(Parser, Debug)]
@@ -488,8 +487,9 @@ impl Video2En {
         
         println!("🌐 正在翻译英文内容...");
         
+        let total_count = segments.len();
         for (i, segment) in segments.iter_mut().enumerate() {
-            print!("\r🔄 翻译进度: {}/{}", i + 1, segments.len());
+            print!("\r🔄 翻译进度: {}/{}", i + 1, total_count);
             std::io::Write::flush(&mut std::io::stdout()).ok();
             
             match translator.translate(&segment.text).await {
@@ -581,15 +581,6 @@ impl Video2En {
 async fn main() -> Result<()> {
     let args = Args::parse();
     
-    // Validate input file exists
-    if !args.input.exists() {
-        return Err(anyhow!("Input file does not exist: {}", args.input.display()));
-    }
-
-    // Validate model file exists
-    if !args.model.exists() {
-        return Err(anyhow!("Model file does not exist: {}", args.model.display()));
-    }
 
     // 如果指定了测试翻译，则只运行测试，不需要验证输入文件
     if args.test_translation {

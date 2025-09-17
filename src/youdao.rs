@@ -1,10 +1,7 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
 use std::str::FromStr;
 use url::Url;
-use md5::{Md5, Digest};
-use hex;
 
 use crate::youdao_translate::WordAllInfo;
 
@@ -45,7 +42,7 @@ impl YoudaoTranslator {
         }
     }
 
-    pub async fn translate(&self， text: &String) -> Result<WordAllInfo> {
+    pub async fn translate(&self, text: &String) -> Result<WordAllInfo> {
         let client = reqwest::Client::builder().no_proxy().build()?;
         let w = "Mk6hqtUp33DGGtoS63tTJbMUYjRrG1Lu";
         let v = "webdict";
@@ -55,16 +52,10 @@ impl YoudaoTranslator {
         let r = format!("{}{}", text, v);
         let time = (r.len() % 10).to_string();
     
-        let mut hasher = Md5::new();
-        hasher.update(r.as_bytes());
-        let result = hasher.finalize();
-        let o = hex::encode(result);
+        let o = format!("{:x}", md5::compute(r.as_bytes()));
     
         let n = format!("{}{}{}{}{}", param_client, text, time, w, o);
-        let mut hasher = Md5::new();
-        hasher.update(n.as_bytes());
-        let result = hasher.finalize();
-        let f = hex::encode(result);
+        let f = format!("{:x}", md5::compute(n.as_bytes()));
     
         let params = [
             ("q", text.as_str()),
