@@ -274,6 +274,33 @@ pub struct VideoSents {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct WebTrans {
+    #[serde(rename = "web-translation")]
+    pub web_translation: Vec<WebTranslation>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct WebTranslation {
+    pub key: String,
+    #[serde(rename = "key-speech")]
+    pub key_speech: String,
+    pub trans: Vec<Trans>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Trans {
+    pub value: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Fanyi {
+    pub input: String,
+    #[serde(rename = "type")]
+    pub fanyi_type: String,
+    pub tran: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct WordAllInfo {
     pub video_sents: Option<VideoSents>,
     pub simple: Option<Simple>,
@@ -281,7 +308,7 @@ pub struct WordAllInfo {
     pub syno: Option<Syno>,
     pub discriminate: Option<Discriminate>,
     pub lang: String,
-    pub ec: Ec,
+    pub ec: Option<Ec>,
     pub ee: Option<Ee>,
     pub blng_sents_part: Option<BlngSentsPart>,
     pub individual: Option<Individual>,
@@ -292,4 +319,7 @@ pub struct WordAllInfo {
     pub input: String,
     pub meta: Meta,
     pub le: String,
+    pub fanyi: Option<Fanyi>,
+    #[serde(rename = "web_trans")]
+    pub web_trans: Option<WebTrans>,
 }

@@ -483,7 +483,7 @@ impl Video2En {
     }
 
     async fn translate_segments(&self, segments: &mut Vec<Segment>) -> Result<()> {
-        let translator = YoudaoTranslator::new();
+        let translator = YoudaoTranslator;
         
         println!("🌐 正在翻译英文内容...");
         
@@ -494,8 +494,8 @@ impl Video2En {
             
             match translator.translate(&segment.text).await {
                 Ok(word_info) => {
-                    if let Some(ec) = word_info.ec.word.trs.first() {
-                        segment.translation = Some(ec.tran.clone());
+                    if let Some(fanyi) = &word_info.fanyi {
+                        segment.translation = Some(fanyi.tran.clone());
                     } else {
                         segment.translation = Some("未找到翻译".to_string());
                     }
@@ -514,10 +514,10 @@ impl Video2En {
         Ok(())
     }
 
-    async fn test_translation(&self) -> Result<()> {
+    async fn test_translation() -> Result<()> {
         println!("🧪 测试有道翻译API...");
         
-        let translator = YoudaoTranslator::new();
+        let translator = YoudaoTranslator;
         
         let test_text = "It's peaceful".to_string();
         println!("📝 测试文本: {}", test_text);
@@ -526,8 +526,10 @@ impl Video2En {
             Ok(word_info) => {
                 println!("✅ 翻译成功!");
                 println!("   英文: {}", test_text);
-                if let Some(ec) = word_info.ec.word.trs.first() {
-                    println!("   中文: {}", ec.tran);
+                
+                // 从fanyi字段获取翻译
+                if let Some(fanyi) = &word_info.fanyi {
+                    println!("   中文: {}", fanyi.tran);
                 } else {
                     println!("   中文: 未找到翻译");
                 }
@@ -584,8 +586,7 @@ async fn main() -> Result<()> {
 
     // 如果指定了测试翻译，则只运行测试，不需要验证输入文件
     if args.test_translation {
-        let processor = Video2En::new(args)?;
-        processor.test_translation().await
+        Video2En::test_translation().await
     } else {
         // 验证输入文件存在
         let input = args.input.as_ref()

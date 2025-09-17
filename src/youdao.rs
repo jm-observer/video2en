@@ -1,46 +1,14 @@
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use url::Url;
 
 use crate::youdao_translate::WordAllInfo;
 
-#[derive(Debug, Deserialize)]
-pub struct YoudaoTranslationResponse {
-    #[serde(rename = "translation")]
-    pub translations: Vec<String>,
-    #[serde(rename = "query")]
-    pub query: String,
-    #[serde(rename = "errorCode")]
-    pub error_code: String,
-}
 
-#[derive(Debug, Serialize)]
-pub struct YoudaoTranslationRequest {
-    pub q: String,
-    pub from: String,
-    pub to: String,
-    pub appKey: String,
-    pub salt: String,
-    pub sign: String,
-}
-
-pub struct YoudaoTranslator {
-    app_key: String,
-    app_secret: String,
-    client: reqwest::Client,
-}
+pub struct YoudaoTranslator;
 
 impl YoudaoTranslator {
-    pub fn new() -> Self {
-        let app_key = "Mk6hqtUp33DGGtoS63tTJbMUYjRrG1Lu".to_string();
-        let app_secret = "your_app_secrewebdictt_here".to_string();
-        Self {
-            app_key,
-            app_secret,
-            client: reqwest::Client::new(),
-        }
-    }
+
 
     pub async fn translate(&self, text: &String) -> Result<WordAllInfo> {
         let client = reqwest::Client::builder().no_proxy().build()?;
@@ -65,15 +33,17 @@ impl YoudaoTranslator {
             ("sign", f.as_str()),
             ("keyfrom", keyfrom),
         ];
-        client
+        let response = client
             .post(Url::from_str(
                 "https://dict.youdao.com/jsonapi_s?doctype=json&jsonversion=4",
             )?)
             .form(&params)
             .send()
-            .await?
-            .json()
-            .await
+            .await?;
+            
+        let response_text = response.text().await?;
+        
+        serde_json::from_str::<WordAllInfo>(&response_text)
             .map_err(|x| anyhow!("{} json fail: {}", text, x.to_string()))
     }
 
