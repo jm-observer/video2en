@@ -52,9 +52,6 @@ struct Args {
     #[arg(long)]
     translate: bool,
 
-    /// Test translation API
-    #[arg(long)]
-    test_translation: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -514,33 +511,6 @@ impl Video2En {
         Ok(())
     }
 
-    async fn test_translation() -> Result<()> {
-        println!("🧪 测试有道翻译API...");
-        
-        let translator = YoudaoTranslator;
-        
-        let test_text = "It's peaceful".to_string();
-        println!("📝 测试文本: {}", test_text);
-        
-        match translator.translate(&test_text).await {
-            Ok(word_info) => {
-                println!("✅ 翻译成功!");
-                println!("   英文: {}", test_text);
-                
-                // 从fanyi字段获取翻译
-                if let Some(fanyi) = &word_info.fanyi {
-                    println!("   中文: {}", fanyi.tran);
-                } else {
-                    println!("   中文: 未找到翻译");
-                }
-            }
-            Err(e) => {
-                println!("❌ 翻译失败: {}", e);
-            }
-        }
-        
-        Ok(())
-    }
 
     fn save_unique_english(&self, segments: &Vec<&Segment>, output_path: &Path) -> Result<()> {
         if output_path.exists() && !self.args.force {
@@ -585,9 +555,6 @@ async fn main() -> Result<()> {
     
 
     // 如果指定了测试翻译，则只运行测试，不需要验证输入文件
-    if args.test_translation {
-        Video2En::test_translation().await
-    } else {
         // 验证输入文件存在
         let input = args.input.as_ref()
             .ok_or_else(|| anyhow!("Input file is required"))?;
@@ -604,5 +571,35 @@ async fn main() -> Result<()> {
 
         let processor = Video2En::new(args)?;
         processor.run().await
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_translation() {
+        let translator = YoudaoTranslator;
+        
+        let test_text = "It's peaceful".to_string();
+        println!("📝 测试文本: {}", test_text);
+        
+        match translator.translate(&test_text).await {
+            Ok(word_info) => {
+                println!("✅ 翻译成功!");
+                println!("   英文: {}", test_text);
+                
+                // 从fanyi字段获取翻译
+                if let Some(fanyi) = &word_info.fanyi {
+                    println!("   中文: {}", fanyi.tran);
+                } else {
+                    println!("   中文: 未找到翻译");
+                }
+            }
+            Err(e) => {
+                println!("❌ 翻译失败: {}", e);
+            }
+        }
     }
 }
