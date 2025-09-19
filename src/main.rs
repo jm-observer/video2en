@@ -121,22 +121,37 @@ impl Video2En {
         Ok(())
     }
 
+    fn audio_name(&self) -> Result<String> {
+        let input_path = self.args.input.as_ref()
+        .ok_or_else(|| anyhow!("Input file is required"))?;
+    
+    // 获取输入文件名（不含扩展名）
+    let input_stem = input_path
+        .file_stem()
+        .ok_or_else(|| anyhow!("Invalid input filename"))?
+        .to_string_lossy()
+        .to_string();
+
+        Ok(input_stem)
+    }
+
     fn extract_audio(&self, output_prefix: &Path) -> Result<PathBuf> {
         let input_path = self.args.input.as_ref()
             .ok_or_else(|| anyhow!("Input file is required"))?;
         
         // 获取输入文件名（不含扩展名）
-        let input_stem = input_path
-            .file_stem()
-            .ok_or_else(|| anyhow!("Invalid input filename"))?
-            .to_string_lossy()
-            .to_string();
+        let input_stem = self.audio_name()?;
         
         // 获取输出目录
         // let output_dir = output_prefix.parent().unwrap_or(Path::new("."));
         
         // 创建音频文件路径：输出目录 + 输入文件名 + .wav
         let audio_path = output_prefix.join(format!("{}.wav", input_stem));
+
+        let copy_input_path = output_prefix.join(format!("{}.mp4", input_stem));
+        if !copy_input_path.exists() {
+            fs::copy(input_path, copy_input_path).context(format!("Failed to copy input file: {}", input_path.display()))?;
+        }
 
         println!("🎵 Extracting audio from: {}", input_path.display());
         println!("💾 Audio will be saved to: {}", audio_path.display());
@@ -363,7 +378,7 @@ impl Video2En {
                 self.translate_segments(&mut deduplicated_segments).await?;
             }
             
-            let output_file = output_prefix.with_extension("unique_english.txt");
+            let output_file = output_prefix.join(format!("{}.txt", self.audio_name()?));
             self.save_unique_english(&deduplicated_segments.iter().collect::<Vec<_>>(), &output_file)?;
             
             // 显示去重后的英文内容预览
@@ -521,15 +536,15 @@ impl Video2En {
         println!("📄 保存去重后的英文内容到: {}", output_path.display());
         
         let mut content = String::new();
-        content.push_str("# 去重后的英文内容 (中英文对照)\n");
-        content.push_str(&format!("# 总计 {} 段唯一英文内容\n\n", segments.len()));
+        // content.push_str("# 去重后的英文内容 (中英文对照)\n");
+        // content.push_str(&format!("# 总计 {} 段唯一英文内容\n\n", segments.len()));
         
-        for (i, segment) in segments.iter().enumerate() {
-            content.push_str(&format!("{}. {}\n", i + 1, segment.text));
-            if let Some(ref translation) = segment.translation {
-                content.push_str(&format!("   中文: {}\n", translation));
-            }
-            content.push_str("\n");
+        for (_i, segment) in segments.iter().enumerate() {
+            content.push_str(&format!("{}\n", segment.text));
+            // if let Some(ref translation) = segment.translation {
+            //     content.push_str(&format!("   中文: {}\n", translation));
+            // }
+            // content.push_str("\n");
         }
 
         fs::write(output_path, content)
