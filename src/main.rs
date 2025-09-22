@@ -13,20 +13,17 @@ use video2en::youdao::YoudaoTranslator;
     long_about = "A Rust CLI tool that extracts audio from video/audio files, \
                   transcribes them using Whisper, and filters for English content. \
                   Supports GPU acceleration (CUDA/OpenCL) for faster processing. \
-                  Outputs three files: full SRT, English-only SRT, and English-only TXT."
+                  Outputs three files: full SRT, English-only SRT, and English-only TXT. \
+                  Uses a workspace directory with fixed subdirectories: input/, models/, output/"
 )]
 struct Args {
-    /// Input video/audio file path
-    #[arg(short, long, value_name = "PATH")]
-    input: Option<PathBuf>,
+    /// Workspace directory containing input/, models/, and output/ subdirectories
+    #[arg(short, long, value_name = "WORKSPACE_DIR")]
+    workspace: PathBuf,
 
-    /// Whisper GGML model path
-    #[arg(short, long, value_name = "PATH")]
-    model: Option<PathBuf>,
-
-    /// Output prefix (without extension, defaults to input filename)
-    #[arg(short, long, value_name = "PREFIX")]
-    output: Option<PathBuf>,
+    /// Model filename (default: ggml-large.bin)
+    #[arg(long, value_name = "MODEL_NAME")]
+    model_name: Option<String>,
 
     /// Recognition language
     #[arg(long, value_name = "auto|en|zh", default_value = "auto")]
@@ -86,26 +83,136 @@ impl Video2En {
         })
     }
 
+    /// 获取workspace中的固定子文件夹路径
+    fn get_workspace_paths(&self) -> Result<(PathBuf, PathBuf, PathBuf)> {
+        let workspace = &self.args.workspace;
+        
+        // 确保workspace目录存在
+        if !workspace.exists() {
+            return Err(anyhow!("Workspace directory does not exist: {}", workspace.display()));
+        }
+        
+        let input_dir = workspace.join("video2en_input");
+        let models_dir = workspace.join("models");
+        let output_dir = workspace.join("video2en_output");
+        
+        // 检查input和models目录是否存在
+        if !input_dir.exists() {
+            return Err(anyhow!("Input directory does not exist: {}", input_dir.display()));
+        }
+        if !models_dir.exists() {
+            return Err(anyhow!("Models directory does not exist: {}", models_dir.display()));
+        }
+        
+        // 只创建output目录（如果不存在）
+        fs::create_dir_all(&output_dir).context("Failed to create output directory")?;
+        
+        Ok((input_dir, models_dir, output_dir))
+    }
+
+    /// 获取输入文件路径列表（从workspace/input/目录中查找）
+    fn get_input_files(&self) -> Result<Vec<PathBuf>> {
+        let (input_dir, _, _) = self.get_workspace_paths()?;
+        
+        // 查找input目录中的视频/音频文件
+        let mut video_files = Vec::new();
+        for entry in fs::read_dir(&input_dir).context(format!("Failed to read input directory: {}", input_dir.display()))? {
+            let entry = entry.context("Failed to read directory entry")?;
+            let path = entry.path();
+            
+            if path.is_file() {
+                if let Some(extension) = path.extension() {
+                    let ext = extension.to_string_lossy().to_lowercase();
+                    if matches!(ext.as_str(), "mp4" | "avi" | "mkv" | "mov" | "wmv" | "flv" | "webm" | 
+                               "mp3" | "wav" | "flac" | "aac" | "ogg" | "m4a") {
+                        video_files.push(path);
+                    }
+                }
+            }
+        }
+        
+        if video_files.is_empty() {
+            return Err(anyhow!("No video/audio files found in input directory: {}", input_dir.display()));
+        }
+        
+        Ok(video_files)
+    }
+
+    /// 获取模型文件路径（从workspace/models/目录中查找）
+    fn get_model_file(&self, model_name: Option<String>) -> Result<PathBuf> {
+        let (_, models_dir, _) = self.get_workspace_paths()?;
+        
+        // 确定要查找的模型文件名
+        let target_model_name = model_name.unwrap_or_else(|| "ggml-large.bin".to_string());
+        let target_path = models_dir.join(&target_model_name);
+        
+        // 检查指定的模型文件是否存在
+        if target_path.exists() && target_path.is_file() {
+            return Ok(target_path);
+        }
+        
+        // 如果指定的文件不存在，查找models目录中的所有.bin文件
+        let mut model_files = Vec::new();
+        for entry in fs::read_dir(&models_dir).context(format!("Failed to read models directory: {}", models_dir.display()))? {
+            let entry = entry.context("Failed to read directory entry")?;
+            let path = entry.path();
+            
+            if path.is_file() {
+                if let Some(extension) = path.extension() {
+                    if extension == "bin" {
+                        model_files.push(path);
+                    }
+                }
+            }
+        }
+        
+        if model_files.is_empty() {
+            return Err(anyhow!("No .bin model files found in models directory: {}", models_dir.display()));
+        }
+        
+        if model_files.len() > 1 {
+            return Err(anyhow!("Multiple model files found in models directory. Please specify model name with --model-name or keep only one file: {:?}", model_files));
+        }
+        
+        Ok(model_files[0].clone())
+    }
+
     async fn run(&self) -> Result<()> {
         // Check ffmpeg availability
         self.check_ffmpeg()?;
 
-        // Determine output prefix first
-        let output_prefix = self.get_output_prefix()?;
+        // 获取所有输入文件
+        let input_files = self.get_input_files()?;
+        
+        println!("📁 找到 {} 个输入文件", input_files.len());
 
-        // Extract audio
-        let audio_path = self.extract_audio(&output_prefix)?;
+        let (_, _, output_dir) = self.get_workspace_paths()?;
+        
+        // 检查并处理输出目录
+        self.handle_output_directory(&output_dir)?;
+        
+        // 循环处理每个输入文件
+        for (index, input_file) in input_files.iter().enumerate() {
+            println!("\n🎬 处理文件 {}/{}: {}", index + 1, input_files.len(), input_file.display());
+            
+            // 获取当前文件的输出前缀
+            // let output_prefix = self.get_output_prefix_for_file(input_file)?;
+            
+            // Extract audio
+            let audio_path = self.extract_audio_for_file(input_file, &output_dir)?;
+            
+            // Transcribe with whisper-cli.exe
+            let segments = self.transcribe(&audio_path, &output_dir)?;
+            
+            // 分析和统计英文内容
+            self.write_outputs(&segments, &audio_path).await?;
+            
+            println!("✅ 文件 {} 处理完成!", input_file.file_name().unwrap_or_default().to_string_lossy());
+            println!("📁 生成的文件:");
+            println!("   - {} (音频文件)", audio_path.display());
+        }
 
-        // Transcribe with whisper-cli.exe
-        let segments = self.transcribe(&audio_path)?;
-
-        // 分析和统计英文内容
-        self.write_outputs(&segments, &output_prefix).await?;
-
-        println!("✅ Processing completed successfully!");
-        println!("📁 生成的文件:");
-        println!("   - {} (音频文件)", audio_path.display());
-
+        println!("\n🎉 所有文件处理完成！共处理了 {} 个文件", input_files.len());
         Ok(())
     }
 
@@ -121,36 +228,105 @@ impl Video2En {
         Ok(())
     }
 
-    fn audio_name(&self) -> Result<String> {
-        let input_path = self.args.input.as_ref()
-        .ok_or_else(|| anyhow!("Input file is required"))?;
-    
-    // 获取输入文件名（不含扩展名）
-    let input_stem = input_path
-        .file_stem()
-        .ok_or_else(|| anyhow!("Invalid input filename"))?
-        .to_string_lossy()
-        .to_string();
+    fn handle_output_directory(&self, output_dir: &Path) -> Result<()> {
+        if !output_dir.exists() {
+            // 输出目录不存在，创建它
+            fs::create_dir_all(output_dir).context("Failed to create output directory")?;
+            println!("📁 创建输出目录: {}", output_dir.display());
+            return Ok(());
+        }
 
-        Ok(input_stem)
+        // 检查输出目录是否为空
+        let mut entries = fs::read_dir(output_dir).context("Failed to read output directory")?;
+        if entries.next().is_none() {
+            // 目录为空，直接使用
+            println!("📁 输出目录为空，直接使用: {}", output_dir.display());
+            return Ok(());
+        }
+
+        // 目录不为空，需要重命名
+        println!("📁 输出目录不为空，正在重命名: {}", output_dir.display());
+        
+        let mut backup_name = output_dir.with_file_name(format!("{}_backup", output_dir.file_name().unwrap_or_default().to_string_lossy()));
+        let mut counter = 1;
+        
+        // 处理多次重命名的情况
+        while backup_name.exists() {
+            backup_name = output_dir.with_file_name(format!("{}_backup_{}", 
+                output_dir.file_name().unwrap_or_default().to_string_lossy(), 
+                counter
+            ));
+            counter += 1;
+        }
+        
+        // 重命名原目录
+        fs::rename(output_dir, &backup_name).context("Failed to rename output directory")?;
+        println!("📁 已重命名为: {}", backup_name.display());
+        
+        // 创建新的输出目录
+        fs::create_dir_all(output_dir).context("Failed to create new output directory")?;
+        println!("📁 创建新的输出目录: {}", output_dir.display());
+        
+        Ok(())
     }
 
+
     fn extract_audio(&self, output_prefix: &Path) -> Result<PathBuf> {
-        let input_path = self.args.input.as_ref()
-            .ok_or_else(|| anyhow!("Input file is required"))?;
+        let input_files = self.get_input_files()?;
+        let input_path = &input_files[0]; // 使用第一个文件
         
         // 获取输入文件名（不含扩展名）
-        let input_stem = self.audio_name()?;
-        
-        // 获取输出目录
-        // let output_dir = output_prefix.parent().unwrap_or(Path::new("."));
+        let input_stem = input_path
+            .file_stem()
+            .ok_or_else(|| anyhow!("Invalid input filename"))?
+            .to_string_lossy()
+            .to_string();
         
         // 创建音频文件路径：输出目录 + 输入文件名 + .wav
         let audio_path = output_prefix.join(format!("{}.wav", input_stem));
 
-        let copy_input_path = output_prefix.join(format!("{}.mp4", input_stem));
-        if !copy_input_path.exists() {
-            fs::copy(input_path, copy_input_path).context(format!("Failed to copy input file: {}", input_path.display()))?;
+        // 确保音频文件的父目录存在
+        if let Some(parent) = audio_path.parent() {
+            fs::create_dir_all(parent).context("Failed to create audio output directory")?;
+        }
+
+        println!("🎵 Extracting audio from: {}", input_path.display());
+        println!("💾 Audio will be saved to: {}", audio_path.display());
+
+        let status = Command::new("ffmpeg")
+            .args([
+                "-y",                    // Overwrite output
+                "-i", input_path.to_str().unwrap(),
+                "-vn",                   // No video
+                "-ac", "1",             // Mono
+                "-ar", "16000",         // 16kHz sample rate
+                "-f", "wav",            // WAV format
+                audio_path.to_str().unwrap(),
+            ])
+            .status()
+            .context("Failed to execute ffmpeg")?;
+
+        if !status.success() {
+            return Err(anyhow!("ffmpeg failed with exit code: {}", status));
+        }
+
+        Ok(audio_path)
+    }
+
+    fn extract_audio_for_file(&self, input_path: &Path, output_prefix: &Path) -> Result<PathBuf> {
+        // 获取输入文件名（不含扩展名）
+        let input_stem = input_path
+            .file_stem()
+            .ok_or_else(|| anyhow!("Invalid input filename"))?
+            .to_string_lossy()
+            .to_string();
+        
+        // 创建音频文件路径：输出目录 + 输入文件名 + .wav
+        let audio_path = output_prefix.join(format!("{}.wav", input_stem));
+
+        // 确保音频文件的父目录存在
+        if let Some(parent) = audio_path.parent() {
+            fs::create_dir_all(parent).context("Failed to create audio output directory")?;
         }
 
         println!("🎵 Extracting audio from: {}", input_path.display());
@@ -178,32 +354,32 @@ impl Video2En {
 
 
 
-    fn transcribe(&self, audio_path: &Path) -> Result<Vec<Segment>> {
+    fn transcribe(&self, audio_path: &Path, output_prefix: &Path) -> Result<Vec<Segment>> {
         println!("🤖 Transcribing audio using whisper-cli.exe...");
         
         // 检查 whisper-cli.exe 是否可用
         self.check_whisper_cli()?;
         
         // 获取输出目录和文件名
-        let output_prefix = self.get_output_prefix()?;
-        let output_dir = &output_prefix;
-        let output_name = output_prefix.file_stem().unwrap_or_default().to_string_lossy().to_string();
-        
-        println!("📁 Output directory: {}", output_dir.display());
+        // let output_prefix = self.get_output_prefix()?;
+        // let output_dir = &output_prefix;
+        let output_name = audio_path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+        let txt_output = output_prefix.join(format!("{}_raw", output_name));
+
+        // println!("📁 Output directory: {}", output_dir.display());
         
         // 构建 whisper-cli 命令 - 使用指定的参数格式
-        let model = self.args.model.as_ref()
-            .ok_or_else(|| anyhow!("Model file is required"))?;
+        let model = self.get_model_file(self.args.model_name.clone())?;
         let mut cmd = Command::new("whisper-cli.exe");
         cmd.arg("-m").arg(model)
            .arg("-f").arg(audio_path.to_str().unwrap())
-           .arg("-l").arg("en")  // 固定为英文
+        //    .arg("-l").arg("en")  // 固定为英文
            .arg("-tr")           // 翻译
            .arg("-bs").arg("8")  // batch size
            .arg("-bo").arg("1")  // best of
            .arg("-t").arg("8")   // threads
            .arg("-otxt")         // 输出文本格式
-           .arg("-of").arg(output_dir.join(&output_name));
+           .arg("-of").arg(txt_output.clone());
         
         println!("🎯 Running whisper-cli with command: {:?}", cmd);
         
@@ -217,16 +393,16 @@ impl Video2En {
             return Err(anyhow!("whisper-cli failed:\nSTDERR: {}\nSTDOUT: {}", stderr, stdout));
         }
         
-        // 读取生成的文本文件
-        let txt_output = output_dir.join(format!("{}.txt", output_name));
+        // 读取生成的文本文件（whisper-cli会自动添加.txt扩展名）
+        let txt_output = output_prefix.join(format!("{}_raw.txt", output_name));
         let text_content = fs::read_to_string(&txt_output)
             .context(format!("Failed to read generated text file: {}", txt_output.display()))?;
         
         // 解析文本内容为segments（每行作为一个segment）
         let segments = self.parse_text_to_segments(&text_content);
         
-        // 清理临时文件
-        fs::remove_file(&txt_output).ok();
+        // 保留whisper-cli生成的中间文本文件
+        println!("📄 保留中间文本文件: {}", txt_output.display());
         
         println!("✅ Transcribed {} text segments", segments.len());
         Ok(segments)
@@ -309,29 +485,30 @@ impl Video2En {
     }
     
 
-    fn get_output_prefix(&self) -> Result<PathBuf> {
-        let output_prefix = if let Some(ref output) = self.args.output {
-            output.clone()
-        } else {
-            // Use input filename without extension as prefix
-            let input = self.args.input.as_ref()
-                .ok_or_else(|| anyhow!("Input file is required"))?;
-            let input_stem = input
-                .file_stem()
-                .ok_or_else(|| anyhow!("Invalid input filename"))?
-                .to_string_lossy()
-                .to_string();
-            
-            input
-                .parent()
-                .unwrap_or(Path::new("."))
-                .join(input_stem)
-        };
+    // fn get_output_prefix(&self) -> Result<PathBuf> {
+    //     let (_, _, output_dir) = self.get_workspace_paths()?;
+        
+    //     // 获取输入文件名作为输出前缀
+    //     let input_files = self.get_input_files()?;
+    //     let input_file = &input_files[0]; // 使用第一个文件
+    //     let input_stem = input_file
+    //         .file_stem()
+    //         .ok_or_else(|| anyhow!("Invalid input filename"))?
+    //         .to_string_lossy()
+    //         .to_string();
+        
+    //     let output_prefix = output_dir.join(input_stem);
+        
+    //     // 确保输出目录存在
+    //     if let Some(parent) = output_prefix.parent() {
+    //         fs::create_dir_all(parent).context("Failed to create output directory")?;
+    //     }
+        
+    //     Ok(output_prefix)
+    // }
 
-        Ok(output_prefix)
-    }
 
-    async fn write_outputs(&self, segments: &[Segment], output_prefix: &Path) -> Result<()> {
+    async fn write_outputs(&self, segments: &[Segment], audio_path: &Path) -> Result<()> {
         // 过滤英文segments
         let english_segments: Vec<&Segment> = segments
             .iter()
@@ -378,7 +555,12 @@ impl Video2En {
                 self.translate_segments(&mut deduplicated_segments).await?;
             }
             
-            let output_file = output_prefix.join(format!("{}.txt", self.audio_name()?));
+            let output_file = audio_path.with_file_name(
+                audio_path.file_stem()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string() + ".txt"
+            );
             self.save_unique_english(&deduplicated_segments.iter().collect::<Vec<_>>(), &output_file)?;
             
             // 显示去重后的英文内容预览
@@ -568,24 +750,18 @@ impl Video2En {
 async fn main() -> Result<()> {
     let args = Args::parse();
     
+    // 验证workspace目录存在
+    if !args.workspace.exists() {
+        return Err(anyhow!("Workspace directory does not exist: {}", args.workspace.display()));
+    }
 
-    // 如果指定了测试翻译，则只运行测试，不需要验证输入文件
-        // 验证输入文件存在
-        let input = args.input.as_ref()
-            .ok_or_else(|| anyhow!("Input file is required"))?;
-        if !input.exists() {
-            return Err(anyhow!("Input file does not exist: {}", input.display()));
-        }
-
-        // 验证模型文件存在
-        let model = args.model.as_ref()
-            .ok_or_else(|| anyhow!("Model file is required"))?;
-        if !model.exists() {
-            return Err(anyhow!("Model file does not exist: {}", model.display()));
-        }
-
-        let processor = Video2En::new(args)?;
-        processor.run().await
+    let processor = Video2En::new(args)?;
+    
+    // 验证输入文件和模型文件存在（这些验证现在在get_input_files和get_model_file中进行）
+    let _input_files = processor.get_input_files()?;
+    let _model_file = processor.get_model_file(processor.args.model_name.clone())?;
+    
+    processor.run().await
 }
 
 
