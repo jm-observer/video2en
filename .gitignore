@@ -29,6 +29,9 @@ output/
 *.srt
 *.txt
 
+# TTS Speaker samples
+speaker_samples/
+
 # Docker
 .dockerignore
 

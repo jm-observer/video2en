@@ -12,6 +12,77 @@
 
 - 🔄 智能覆盖策略，避免重复处理
 
+## 工具组件
+
+本项目包含两个主要工具：
+
+### 1. video2en - 视频转英文字幕
+从视频/音频文件中提取英文字幕的主要工具。
+
+### 2. txt2audio - 文本转音频
+将英文本文件转换为音频文件，并生成对应的 JSON 数据文件。
+
+**功能特性：**
+- 🎙️ 支持调用 TTS 服务将文本转换为语音
+- 📄 逐行处理文本文件
+- 🎵 生成对应的音频文件（WAV 格式）
+- 📊 输出 JSON 格式的元数据文件
+- ⚡ 支持批量处理和错误恢复
+- 🔄 智能跳过已存在的文件
+
+**使用方法：**
+```bash
+# 基本用法
+txt2audio -w workspace_dir
+
+# 指定 TTS 服务地址
+txt2audio -w workspace_dir --tts-url http://localhost:5000
+
+# 指定说话人音频文件
+txt2audio -w workspace_dir --speaker-wav speaker.wav
+
+# 强制覆盖已存在的文件
+txt2audio -w workspace_dir --force
+```
+
+**工作区结构：**
+```
+workspace_dir/
+├── txt2audio_input/          # 输入目录（必须存在）
+│   ├── english1.txt
+│   ├── english2.txt
+│   └── ...
+└── txt2audio_output/         # 输出目录（自动创建）
+    ├── audio/                # 音频文件目录
+    │   ├── Hello, how are you today.wav
+    │   ├── This is a test sentence.wav
+    │   ├── I hope this works correctly.wav
+    │   └── ...
+    └── english1_audio_data.json
+```
+
+**输出文件：**
+- `audio/Hello, how are you today.wav` - 第1行文本的音频文件
+- `audio/This is a test sentence.wav` - 第2行文本的音频文件
+- ...
+- `filename_audio_data.json` - 包含所有文本和音频文件路径的元数据
+
+**JSON 输出格式：**
+```json
+{
+  "entries": [
+    {
+      "text": "Hello, how are you today?",
+      "audio_file": "D:/workspace/txt2audio_output/audio/Hello, how are you today.wav",
+      "line_number": 1
+    }
+  ],
+  "total_count": 4,
+  "output_directory": "txt2audio_output",
+  "input_file": "txt2audio_input/filename.txt"
+}
+```
+
 ## 系统要求
 
 - Windows 10/11 (x64)

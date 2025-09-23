@@ -1,0 +1,18 @@
+{
+  "entries": [
+    {
+      "text": "Good morning.",
+      "female_audio": "D:/workspace/txt2audio_output/audio/Good morning_female.wav",
+      "male_audio": "D:/workspace/txt2audio_output/audio/Good morning_male.wav",
+      "line_number": 1
+    },
+    {
+      "text": "How are you?",
+      "female_audio": "D:/workspace/txt2audio_output/audio/How are you_female.wav",
+      "male_audio": "D:/workspace/txt2audio_output/audio/How are you_male.wav",
+      "line_number": 2
+    }
+  ],
+  "total_count": 2,
+  "input_file": "test.txt"
+}

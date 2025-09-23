@@ -31,16 +31,14 @@ def speak():
     try:
         data = request.get_json(force=True)
         text = data.get("text")
-        output_path = data.get("output", "out.wav")
         language = data.get("language", "en")
-        speaker_wav = data.get("speaker_wav", os.path.join(MODEL_DIR, "en_sample.wav"))
+        speaker_wav = os.path.join(MODEL_DIR, data.get("speaker_wav", "en_sample.wav"))
 
         if not text:
             return jsonify({"error": "Missing text"}), 400
 
         print(f"📝 Text: {text}")
         print(f"🎙️ Speaker wav: {speaker_wav}")
-        print(f"💾 Output: {output_path}")
 
         outputs = model.synthesize(
             text,
@@ -72,9 +70,16 @@ def speak():
         if wav_tensor.max() > 1.0 or wav_tensor.min() < -1.0:
             wav_tensor = torch.clamp(wav_tensor, -1.0, 1.0)
         
-        # 保存为WAV文件
-        torchaudio.save(output_path, wav_tensor, 22050)
-        return send_file(output_path, mimetype="audio/wav")
+        # 将音频数据转换为字节流
+        import io
+        buffer = io.BytesIO()
+        torchaudio.save(buffer, wav_tensor, 22050, format="wav")
+        buffer.seek(0)
+        
+        return buffer.getvalue(), 200, {
+            'Content-Type': 'audio/wav',
+            'Content-Disposition': 'attachment; filename=audio.wav'
+        }
 
     except Exception as e:
         import traceback
