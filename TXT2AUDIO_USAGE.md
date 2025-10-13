@@ -45,12 +45,20 @@ txt2audio -w my_workspace
 txt2audio -w my_workspace --tts-url http://192.168.1.100:5000
 ```
 
-### 3. 使用自定义说话人
+### 3. 使用默认男女音频（自动生成两个版本）
 ```bash
-txt2audio -w my_workspace --speaker-wav my_speaker.wav
+txt2audio -w my_workspace
+```
+程序会自动生成男声和女声两个版本的音频文件：
+- 男声：使用 `1320-122617-0037.wav`（默认）
+- 女声：使用 `en_sample.wav`（默认）
+
+### 4. 自定义男女音频说话人
+```bash
+txt2audio -w my_workspace --male-speaker-wav 1320-122617-0037.wav --female-speaker-wav en_sample.wav
 ```
 
-### 4. 强制覆盖已存在的文件
+### 5. 强制覆盖已存在的文件
 ```bash
 txt2audio -w my_workspace --force
 ```
@@ -61,7 +69,8 @@ txt2audio -w my_workspace --force
 |------|------|------|--------|------|
 | `--workspace` | `-w` | ✅ | - | 工作区目录路径 |
 | `--tts-url` | - | ❌ | `http://localhost:5000` | TTS 服务地址 |
-| `--speaker-wav` | - | ❌ | - | 说话人音频文件路径 |
+| `--male-speaker-wav` | - | ❌ | `1320-122617-0037.wav` | 男声说话人音频文件名 |
+| `--female-speaker-wav` | - | ❌ | `en_sample.wav` | 女声说话人音频文件名 |
 | `--language` | - | ❌ | `en` | 语言代码 |
 | `--force` | - | ❌ | `false` | 强制覆盖已存在的文件 |
 
@@ -76,10 +85,12 @@ my_workspace/
 │   └── ...
 └── txt2audio_output/         # 输出目录（自动创建）
     ├── audio/                # 音频文件目录
-    │   ├── Hello, how are you today.wav
-    │   ├── This is a test sentence.wav
-    │   ├── I hope this works correctly.wav
-    │   ├── Thank you for using our service.wav
+    │   ├── Hello,_how_are_you_today_female.wav    # 女声版本
+    │   ├── Hello,_how_are_you_today_male.wav      # 男声版本
+    │   ├── This_is_a_test_sentence_female.wav
+    │   ├── This_is_a_test_sentence_male.wav
+    │   ├── I_hope_this_works_correctly_female.wav
+    │   ├── I_hope_this_works_correctly_male.wav
     │   └── ...
     ├── english1_audio_data.json
     ├── english2_audio_data.json
@@ -89,8 +100,8 @@ my_workspace/
 ### 音频文件
 - 格式：WAV (22050 Hz, 单声道)
 - 位置：`txt2audio_output/audio/` 目录下
-- 命名：`{英文内容}.wav`（特殊字符会被替换为下划线，双点号会被修复）
-- 示例：`audio/Hello, how are you today.wav`, `audio/This is a test sentence.wav`
+- 命名：`{英文内容}_female.wav` 和 `{英文内容}_male.wav`（特殊字符会被替换为下划线）
+- 每行文本生成两个音频文件：女声版本和男声版本
 
 ### JSON 元数据文件
 - 文件名：`{输入文件名}_audio_data.json`
@@ -113,10 +124,13 @@ mkdir learning_workspace\txt2audio_input
 # 3. 运行处理
 txt2audio -w learning_workspace
 
-# 输出：
-# learning_workspace/txt2audio_output/audio/Hello, welcome to English learning.wav
-# learning_workspace/txt2audio_output/audio/Today we will learn basic vocabulary.wav  
-# learning_workspace/txt2audio_output/audio/Let's start with common greetings.wav
+# 输出（每行文本生成男女两个版本）：
+# learning_workspace/txt2audio_output/audio/Hello,_welcome_to_English_learning_female.wav
+# learning_workspace/txt2audio_output/audio/Hello,_welcome_to_English_learning_male.wav
+# learning_workspace/txt2audio_output/audio/Today_we_will_learn_basic_vocabulary_female.wav
+# learning_workspace/txt2audio_output/audio/Today_we_will_learn_basic_vocabulary_male.wav
+# learning_workspace/txt2audio_output/audio/Let's_start_with_common_greetings_female.wav
+# learning_workspace/txt2audio_output/audio/Let's_start_with_common_greetings_male.wav
 # learning_workspace/txt2audio_output/learning_material_audio_data.json
 ```
 
@@ -135,7 +149,15 @@ txt2audio -w batch_workspace
 # 输出：每个文件都会生成对应的音频文件和JSON元数据
 ```
 
-### 示例 3：使用自定义 TTS 服务
+### 示例 3：使用自定义男女音频说话人
+```bash
+# 使用不同的音频样本文件
+txt2audio -w my_workspace \
+  --male-speaker-wav 1320-122617-0037.wav \
+  --female-speaker-wav en_sample.wav
+```
+
+### 示例 4：使用自定义 TTS 服务
 ```bash
 txt2audio -w my_workspace --tts-url http://my-tts-server:8080
 ```
@@ -147,20 +169,64 @@ txt2audio -w my_workspace --tts-url http://my-tts-server:8080
   "entries": [
     {
       "text": "Hello, welcome to English learning.",
-      "audio_file": "D:/workspace/txt2audio_output/audio/Hello, welcome to English learning.wav",
+      "female_audio": "txt2audio_output/audio/Hello,_welcome_to_English_learning_female.wav",
+      "male_audio": "txt2audio_output/audio/Hello,_welcome_to_English_learning_male.wav",
       "line_number": 1
     },
     {
       "text": "Today we will learn basic vocabulary.",
-      "audio_file": "D:/workspace/txt2audio_output/audio/Today we will learn basic vocabulary.wav", 
+      "female_audio": "txt2audio_output/audio/Today_we_will_learn_basic_vocabulary_female.wav",
+      "male_audio": "txt2audio_output/audio/Today_we_will_learn_basic_vocabulary_male.wav",
       "line_number": 2
     }
   ],
-  "total_count": 3,
+  "total_count": 2,
   "output_directory": "txt2audio_output",
   "input_file": "txt2audio_input/learning_material.txt"
 }
 ```
+
+## 可选音频说话人列表
+
+音频说话人文件位于 TTS 服务的 `workspace/models/tts/XTTS-v2/` 目录下。
+
+### 默认配置
+- **男声默认**：`1320-122617-0037.wav`
+- **女声默认**：`en_sample.wav`
+
+### 如何使用其他音频说话人
+1. 查看 TTS 服务的 `workspace/models/tts/XTTS-v2/` 目录
+2. 选择合适的 WAV 音频文件
+3. 使用参数指定：
+   ```bash
+   txt2audio -w my_workspace \
+     --male-speaker-wav <音频文件名.wav> \
+     --female-speaker-wav <音频文件名.wav>
+   ```
+
+### 音频说话人选择建议
+- 选择发音清晰的音频样本
+- 音频长度建议 5-10 秒
+- 音频质量越好，生成的语音质量越高
+- 可以使用不同语言的音频样本实现跨语言语音克隆
+
+### 常见音频说话人示例
+以下是可能在 `workspace/models/tts/XTTS-v2/` 目录中找到的音频文件：
+
+- `en_sample.wav` - 英文女声样本（默认女声）
+- `1320-122617-0037.wav` - 英文男声样本（默认男声）
+- 其他自定义音频文件...
+
+**注意**：具体可用的音频文件取决于您的 TTS 服务配置。请查看实际目录以获取完整列表。
+
+### 添加自定义音频说话人
+您也可以添加自己的音频样本：
+1. 准备一个 5-10 秒的清晰音频文件（WAV 格式）
+2. 将文件放入 `workspace/models/tts/XTTS-v2/` 目录
+3. 使用文件名作为参数：
+   ```bash
+   txt2audio -w my_workspace --male-speaker-wav my_custom_voice.wav
+   ```
 
 ## 错误处理
 

@@ -24,9 +24,13 @@ struct Args {
     #[arg(long, value_name = "URL", default_value = "http://localhost:5000")]
     tts_url: String,
 
-    /// Speaker audio file path for TTS
-    #[arg(long, value_name = "SPEAKER_WAV")]
-    speaker_wav: Option<PathBuf>,
+    /// Male speaker audio file path for TTS
+    #[arg(long, value_name = "MALE_SPEAKER_WAV", default_value = "1320-122617-0037.wav")]
+    male_speaker_wav: String,
+
+    /// Female speaker audio file path for TTS
+    #[arg(long, value_name = "FEMALE_SPEAKER_WAV", default_value = "en_sample.wav")]
+    female_speaker_wav: String,
 
     /// Language for TTS
     #[arg(long, value_name = "LANG", default_value = "en")]
@@ -254,7 +258,7 @@ impl Txt2Audio {
             let safe_filename = line
                 .chars()
                 .map(|c| match c {
-                    '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
+                    '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | ' ' | '\'' => '_',
                     c if c.is_ascii() => c,
                     _ => '_', // 将所有非ASCII字符（包括中文）替换为下划线
                 })
@@ -300,10 +304,10 @@ impl Txt2Audio {
             }
 
             // 调用TTS服务 - 女性声音
-            tts_client.text_to_speech(line, &female_path, None).await?;
+            tts_client.text_to_speech(line, &female_path, Some(&self.args.female_speaker_wav)).await?;
 
             // 调用TTS服务 - 男性声音
-            tts_client.text_to_speech(line, &male_path, Some("1320-122617-0037.wav")).await?;
+            tts_client.text_to_speech(line, &male_path, Some(&self.args.male_speaker_wav)).await?;
 
             // 只有当至少一个音频生成成功时才添加到结果中
             audio_entries.push(AudioEntry {
@@ -385,9 +389,8 @@ async fn main() -> Result<()> {
     println!("🎵 TTS Text-to-Audio Converter");
     println!("📁 Workspace: {}", args.workspace.display());
     println!("🌐 TTS service: {}", args.tts_url);
-    if let Some(ref speaker) = args.speaker_wav {
-        println!("🎙️ Speaker file: {}", speaker.display());
-    }
+    println!("🎙️ Male speaker: {}", args.male_speaker_wav);
+    println!("🎙️ Female speaker: {}", args.female_speaker_wav);
     println!("🗣️ Language: {}", args.language);
 
     let processor = Txt2Audio::new(args);
